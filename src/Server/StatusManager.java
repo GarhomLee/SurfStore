@@ -35,8 +35,8 @@ class StatusManager {
 	// final private int TIMEOUT_DURATION = 3000; // timeout duration in milliseconds
 	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in milliseconds
 	// for gradescope
-	final private int TIMEOUT_DURATION = 500; // timeout duration in milliseconds
-	final private int HEARTBEAT_DURATION = 10; // heartbeat duration in milliseconds
+	final private int TIMEOUT_DURATION = 2000; // timeout duration in milliseconds
+	final private int HEARTBEAT_DURATION = 900; // heartbeat duration in milliseconds
 
 	/* all possible statuses of a node */
 	public enum Status {
@@ -197,10 +197,14 @@ class StatusManager {
 
 		// determine if it should grant vote to the requestor
 		boolean isVoted = !isCrashed; // cannot reply back if it is crashed
+		System.err.println("isVoted: if it is crashed : " + isVoted);  // debug
 		isVoted = isVoted && requestorTerm > currentTerm; // check term
+		System.err.println("isVoted: if it is valid term comparison: " + isVoted); // debug
 		isVoted = isVoted && (lastLogTerm < requestorLastLogTerm
 				|| (lastLogTerm == requestorLastLogTerm && lastLogIndex <= requestorLastLogIndex)); // check last log
+		System.err.println("isVoted: if it is valid log comparion : " + isVoted); // debug
 		isVoted = isVoted && (votedFor == null || votedFor.equals(requestor)); // check if it has granted vote
+		System.err.println("isVoted: if it is valid voterFor : " + isVoted); // debug
 
 		// organize the result
 		Vector<Object> result = new Vector<>();
