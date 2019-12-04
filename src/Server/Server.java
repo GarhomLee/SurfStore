@@ -197,7 +197,7 @@ public class Server {
 			System.err.println("Accepting requests. (Halt program to stop.)");
 			// System.err.println("program version: proj2/proj2-cse224/, branch: master");
 			// // for proj-2
-			System.err.println("program version: SurfStore/proj3-java/, branch: master"); // for proj-3
+			System.err.println("program version: SurfStore/proj3-java/, branch: log-replication"); // for proj-3
 			System.err.println();
 
 			// start for leader election and log replication implementing Raft protocol

@@ -3,11 +3,12 @@ import java.util.*;
 import java.net.URL;
 
 class RequestVoteCallback implements AsyncCallback {
-    private HashSet<String> votedSet;
-    // private int currentTerm;
+    private HashSet<String> votedSet;  // record servers that has voted, either "for" or "against"
+	private HashSet<String> votedForSet;  // record servers that has voted "for"
 
-    public RequestVoteCallback(HashSet<String> votedSet) {
+    public RequestVoteCallback(HashSet<String> votedSet, HashSet<String> votedForSet) {
         this.votedSet = votedSet;
+        this.votedForSet = votedForSet;
         // this.currentTerm = currentTerm;
     }
 
@@ -17,9 +18,10 @@ class RequestVoteCallback implements AsyncCallback {
         boolean isVoted = (boolean) voteResult.get(0);
         String voteFrom = (String) voteResult.get(1);
         // int votedTerm = (int) voteResult.get(2);
+        votedSet.add(voteFrom);
         if (isVoted) {
             System.err.println("receive vote from: " + voteFrom);
-            votedSet.add(voteFrom);
+            votedForSet.add(voteFrom);
         } else {
             // debug
             System.err.println("vote denied by: " + voteFrom);

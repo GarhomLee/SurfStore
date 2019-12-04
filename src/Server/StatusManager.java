@@ -14,7 +14,8 @@ class StatusManager {
 								// monotonically)
 	private String votedFor; // candidate server that received vote in a given term (or null if none), only
 								// valid in election period. Reset null in a new term
-	private HashSet<String> votedSet;
+	private HashSet<String> votedSet;  // record servers that has voted, either "for" or "against"
+	private HashSet<String> votedForSet;  // record servers that has voted "for"
 	private Vector<Vector<Object>> logs; // log entries; each entry contains:
 											// (1) the term when entry was received by leader (first index is 0)
 											// (2) a state machine (update of a single file)
@@ -27,16 +28,18 @@ class StatusManager {
 	private int totalNodesNum; // the total number of nodes, including current node itself
 	private Timer timer;
 	private TimerTask task;
+	private Timer requestVoteTimer;
+	private TimerTask requestVoteTask;
 	private int timeout; // timeout duration, depending on random number
 	private Random random; // introduce random duration for timeout
 	private boolean isCrashed; // indicate if this node is in the crashed state
 
-	// // for local test
+	// for local test
 	// final private int TIMEOUT_DURATION = 2000; // timeout duration in milliseconds
 	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in milliseconds
 	// for gradescope
-	final private int TIMEOUT_DURATION = 150; // timeout duration in milliseconds
-	final private int HEARTBEAT_DURATION = 10; // heartbeat duration in milliseconds
+	final private int TIMEOUT_DURATION = 1000; // timeout duration in milliseconds
+	final private int HEARTBEAT_DURATION = 250; // heartbeat duration in milliseconds
 
 	/* all possible statuses of a node */
 	public enum Status {
@@ -51,12 +54,14 @@ class StatusManager {
 		this.currentStatus = Status.FOLLOWER;
 		this.totalNodesNum = serversList.size() + 1;
 		this.votedSet = new HashSet<>();
+		this.votedForSet = new HashSet<>();
 		this.currentTerm = 0;
 		this.logs = new Vector<>();
 		this.commitIndex = -1;
 		this.nextIndex = new Hashtable<>();
 		this.random = new Random();
 		this.isCrashed = false;
+		this.requestVoteTimer = new Timer("RequestVoteTimer");
 	}
 
 	/* entrance funciton to start a new server */
@@ -98,13 +103,15 @@ class StatusManager {
 																															// debug
 		timer.schedule(task, timeout); // timeout start
 
-		currentTerm++;
+		currentTerm += 1;
 		System.err.println("Election for new term " + currentTerm + " has started. currentNode: " + currentNode
 				+ ", term: " + currentTerm);
 		currentLeader = null;
 		currentStatus = Status.CANDIDATE;
 		votedSet.clear(); // reset to empty set
 		votedSet.add(currentNode); // add itself
+		votedForSet.clear();
+		votedForSet.add(currentNode);
 		votedFor = currentNode; // vote for itself
 
 		// request votes from all other nodes if it is still a candidate and not crashed
@@ -115,7 +122,7 @@ class StatusManager {
 
 	/* send async requests for election votes */
 	private void sendRequestVote() {
-		TimerTask requestVoteTask = new TimerTask() {
+		requestVoteTask = new TimerTask() {
 			public void run() {
 				System.out.println(
 						"Thread's name: " + Thread.currentThread().getName() + ". Task performed on: " + new Date()); // for
@@ -125,7 +132,7 @@ class StatusManager {
 					if (votedSet.size() < totalNodesNum / 2 + 1) {
 						// resend requestVote()
 						System.err.println("Only " + votedSet.size() + " out of " + totalNodesNum
-								+ " positive response votes. Resend requests for votes. currentNode: " + currentNode
+								+ " respond, with " + votedForSet.size() +" positive votes. Resend requests for votes. currentNode: " + currentNode
 								+ ", term: " + currentTerm); // for debug
 						if (!isCrashed) {
 							sendRequestVote();
@@ -134,7 +141,8 @@ class StatusManager {
 						// become a leader
 						currentStatus = Status.LEADER;
 						currentLeader = currentNode;
-						System.err.println("[" + currentNode + "] is now the leader with " + votedSet.size()
+						votedFor = null;
+						System.err.println("[" + currentNode + "] is now the leader with " + votedForSet.size()
 								+ " votes. Current term is: " + currentTerm);
 						if (!isCrashed) {
 							leaderActions();
@@ -143,9 +151,10 @@ class StatusManager {
 				}
 			}
 		};
-		Timer requestVoteTimer = new Timer("RequestVoteTimer");
-		System.err.println("A requestVoteTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
-																														// debug
+		
+		System.err.println("A requestVoteTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for debug
+		requestVoteTimer.cancel();
+		requestVoteTimer = new Timer("RequestVoteTimer");
 		requestVoteTimer.schedule(requestVoteTask, getRandomTimeout(HEARTBEAT_DURATION)); // timeout start
 
 		// use RPC to request votes from all other nodes
@@ -165,7 +174,7 @@ class StatusManager {
 				params.add(requestorLastLogIndex); // requestorLastLogIndex
 				int requestorLastLogTerm = logs.isEmpty() ? 0 : (int) logs.get(requestorLastLogIndex).get(0);
 				params.add(requestorLastLogTerm); // requestorLastLogTerm
-				client.executeAsync("surfstore.requestVote", params, new RequestVoteCallback(votedSet));
+				client.executeAsync("surfstore.requestVote", params, new RequestVoteCallback(votedSet, votedForSet));
 			}
 		} catch (Exception exception) {
 			System.err.println("Exception on StatusManager.sendRequestVote() is found: ");
@@ -189,6 +198,13 @@ class StatusManager {
 		boolean isVoted = !isCrashed; // cannot reply back if it is crashed
 		System.err.println("isVoted: if it is not crashed : " + isVoted); // debug
 		isVoted = isVoted && requestorTerm > currentTerm; // check term
+		if (isVoted) {
+			// term should update, and change into follower
+			currentTerm = requestorTerm;
+			currentStatus = Status.FOLLOWER;
+			votedFor = requestor; // grant vote to the requestor
+			registerFollowerTimeout();
+		}
 		System.err.println("isVoted: if it is valid term comparison: " + isVoted); // debug
 		isVoted = isVoted && (lastLogTerm < requestorLastLogTerm
 				|| (lastLogTerm == requestorLastLogTerm && lastLogIndex <= requestorLastLogIndex)); // check last log
@@ -203,11 +219,7 @@ class StatusManager {
 
 		if (isVoted) {
 			System.err.println("This vote is granted. currentNode: " + currentNode + ", term: " + currentTerm);
-
 			votedFor = requestor; // grant vote to the requestor
-			currentTerm = requestorTerm;
-			currentStatus = Status.FOLLOWER;
-			registerFollowerTimeout();
 		} else {
 			System.err.println("This vote is denied. currentNode: " + currentNode + ", term: " + currentTerm);
 		}
@@ -216,6 +228,9 @@ class StatusManager {
 
 	/* register follower timeout */
 	private void registerFollowerTimeout() {
+		// cancel the next request vote schedule if it is already a follower
+		requestVoteTimer.cancel();  
+		
 		task = new TimerTask() {
 			public void run() {
 				System.out.println(
@@ -243,6 +258,7 @@ class StatusManager {
 	private void leaderActions() {
 		System.err.println("This is leader actions. currentNode: " + currentNode + ", term: " + currentTerm);
 		// reset the timer for just sending heartbeats
+		requestVoteTimer.cancel();
 		if (timer != null) {
 			timer.cancel();
 		}
