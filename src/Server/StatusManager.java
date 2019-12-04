@@ -31,13 +31,12 @@ class StatusManager {
 	private Random random; // introduce random duration for timeout
 	private boolean isCrashed; // indicate if this node is in the crashed state
 
-	// for local test
-	final private int TIMEOUT_DURATION = 3000; // timeout duration in milliseconds
-	final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in
-	// milliseconds
-	// // for gradescope
+	// // for local test
 	// final private int TIMEOUT_DURATION = 2000; // timeout duration in milliseconds
-	// final private int HEARTBEAT_DURATION = 100; // heartbeat duration in milliseconds
+	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in milliseconds
+	// for gradescope
+	final private int TIMEOUT_DURATION = 150; // timeout duration in milliseconds
+	final private int HEARTBEAT_DURATION = 10; // heartbeat duration in milliseconds
 
 	/* all possible statuses of a node */
 	public enum Status {
