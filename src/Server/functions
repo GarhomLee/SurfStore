@@ -1,0 +1,53 @@
+while (true) {
+			if (currentStatus == Status.LEADER) {
+				// set up the timeout if not set yet, and prevent repeated actions during
+				// timeout period
+				if (leaderTimer == null) {
+					TimerTask leaderTask = new TimerTask() {
+						public void run() {
+							System.out.println("Task performed on: " + new Date() + "\nThread's name: "
+									+ Thread.currentThread().getName()); // for debug
+							// the leader sends heartbeats
+							sendHeartbeat();
+						}
+					};
+					leaderTimer = new Timer("LeaderTimer");
+					leaderTimer.schedule(leaderTask, getRandomTimeout(HEARTBEAT_DURATION));
+				}
+			} else if (currentStatus == Status.FOLLOWER) {
+				
+				if (followerTimer == null) {
+					System.out.println("in follower state");
+					TimerTask followerTask = new TimerTask() {
+						public void run() {
+							System.out.println("Task performed on: " + new Date() + "\nThread's name: "
+									+ Thread.currentThread().getName()); // for debug
+							// start a new term and election if this election period has timed out
+							startElection();
+						}
+					};
+					timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
+					followerTimer = new Timer("FollowerTimer");  
+					// followerTimer.schedule(followerTask, timeout, 1000);
+					followerTimer.schedule(followerTask, timeout);
+					System.err.println("random timeout: " + timeout);  // for debug
+				}
+			} else if (currentStatus == Status.CANDIDATE) {
+				// set up the timeout if not set yet, and prevent repeated actions during
+				// timeout period
+				if (candidateTimer == null) {
+					TimerTask candidateTask = new TimerTask() {
+						public void run() {
+							System.out.println("Task performed on: " + new Date() + "\nThread's name: "
+									+ Thread.currentThread().getName()); // for debug
+							// start a new term and election if this election period has timed out
+							startElection();
+						}
+					};
+					candidateTimer = new Timer("CandidateTimer");
+					timeout = getRandomTimeout(TIMEOUT_DURATION);// for debug
+					candidateTimer.schedule(candidateTask, timeout);
+					// System.err.println("random timeout: " + timeout);// for debug
+				}
+			}
+		}
