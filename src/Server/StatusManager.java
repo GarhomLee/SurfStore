@@ -38,8 +38,8 @@ class StatusManager {
 	// final private int TIMEOUT_DURATION = 2000; // timeout duration in milliseconds
 	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in milliseconds
 	// for gradescope
-	final private int TIMEOUT_DURATION = 1000; // timeout duration in milliseconds
-	final private int HEARTBEAT_DURATION = 250; // heartbeat duration in milliseconds
+	final private int TIMEOUT_DURATION = 150; // timeout duration in milliseconds
+	final private int HEARTBEAT_DURATION = 30; // heartbeat duration in milliseconds
 
 	/* all possible statuses of a node */
 	public enum Status {
@@ -365,10 +365,20 @@ class StatusManager {
 	// with an error (unless indicated otherwise), and shouldn't send
 	// RPCs to other servers
 	public boolean crash() {
-		isCrashed = true; // set the current node as crashed state
-		if (timer != null) {
-			timer.cancel(); // cancel all scheduled task if this server is crashed
+		// do nothing if it is already crashed
+		if (isCrashed) {
+			return true;
 		}
+		// set the current node as crashed state
+		isCrashed = true; 
+		// cancel all scheduled task if this server is crashed
+		if (timer != null) {
+			timer.cancel(); 
+		}
+		requestVoteTimer.cancel(); 
+		// reset
+		currentStatus = Status.FOLLOWER;
+		votedFor = null;
 		System.err.println("Crash(): " + isCrashed);
 		return isCrashed;
 	}
@@ -376,6 +386,10 @@ class StatusManager {
 	// "Restores" this metadata store, allowing it to start responding
 	// to and sending RPCs to other nodes
 	public boolean restore() {
+		// do nothing if it is not crashed
+		if (!isCrashed) {
+			return true;
+		}
 		isCrashed = false; // restore the current node by changing crashed state to be uncrashed
 		run(); // rerun as a follower
 		System.err.println("Restore():" + !isCrashed);
