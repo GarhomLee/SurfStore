@@ -64,24 +64,7 @@ class StatusManager {
 	/* entrance funciton to start a new server */
 	public void run() {
 		// begin as a follower
-		task = new TimerTask() {
-			public void run() {
-				System.out.println(
-						"Task performed on: " + new Date() + "\nThread's name: " + Thread.currentThread().getName()); // for
-																														// debug
-				// start a new term and election if this follower period has timed out
-				if (!isCrashed) {
-					startElection();
-				}
-
-			}
-		};
-		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
-		timer = new Timer("FollowerTimer");
-		timer.schedule(task, timeout);
-		System.err.println("A FollowerTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
-																														// debug
-
+		registerFollowerTimeout();
 		// // for debug
 		// while (true) {
 		// counter++;
@@ -206,7 +189,7 @@ class StatusManager {
 
 		// determine if it should grant vote to the requestor
 		boolean isVoted = !isCrashed; // cannot reply back if it is crashed
-		System.err.println("isVoted: if it is crashed : " + isVoted); // debug
+		System.err.println("isVoted: if it is not crashed : " + isVoted); // debug
 		isVoted = isVoted && requestorTerm > currentTerm; // check term
 		System.err.println("isVoted: if it is valid term comparison: " + isVoted); // debug
 		isVoted = isVoted && (lastLogTerm < requestorLastLogTerm
@@ -221,12 +204,41 @@ class StatusManager {
 		result.add(currentNode);
 
 		if (isVoted) {
-			votedFor = requestor; // grant vote to the requestor
 			System.err.println("This vote is granted. currentNode: " + currentNode + ", term: " + currentTerm);
+
+			votedFor = requestor; // grant vote to the requestor
+			currentTerm = requestorTerm;
+			currentStatus = Status.FOLLOWER;
+			registerFollowerTimeout();
 		} else {
 			System.err.println("This vote is denied. currentNode: " + currentNode + ", term: " + currentTerm);
 		}
 		return result;
+	}
+
+	/* register follower timeout */
+	private void registerFollowerTimeout() {
+		task = new TimerTask() {
+			public void run() {
+				System.out.println(
+						"Task performed on: " + new Date() + "\nThread's name: " + Thread.currentThread().getName()); // for
+																														// debug
+				// start a new term and election if this follower period has timed out
+				if (!isCrashed) {
+					startElection();
+				}
+
+			}
+		};
+		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
+		if (timer != null) {
+			timer.cancel();
+		}
+		timer = new Timer("FollowerTimer");
+		timer.schedule(task, timeout);
+		System.err.println("A FollowerTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
+																														// debug
+
 	}
 
 	/* Leader actions */
@@ -299,26 +311,7 @@ class StatusManager {
 		currentLeader = sender;
 		votedFor = null; // reset for next election
 		// reset timer and task
-		task = new TimerTask() {
-			public void run() {
-				System.out.println(
-						"Task performed on: " + new Date() + "\nThread's name: " + Thread.currentThread().getName()); // for
-																														// debug
-				// start a new term and election if this follower period has timed out
-				if (!isCrashed) {
-					startElection();
-				}
-			}
-		};
-		if (timer != null) {
-			timer.cancel(); // cancel all scheduled tasks
-		}
-		timer = new Timer("FollowerTimer"); // set a new timer in new thread
-		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
-		timer.schedule(task, timeout);
-		System.err.println("A FollowerTimer is registered after called appendEntries(). leader: " + currentLeader
-				+ ". currentNode: " + currentNode + ", term: " + currentTerm); // for debug
-
+		registerFollowerTimeout();
 		return true;
 	}
 
@@ -393,7 +386,7 @@ class StatusManager {
 	/* get a random number determined by the timeout duration */
 	private int getRandomTimeout(int duration) {
 		int res = (int) ((random.nextDouble() + 1) * duration);
-		System.out.println("random timetout: " + res);
+		System.err.println("random timetout: " + res);
 		return res;
 	}
 }
