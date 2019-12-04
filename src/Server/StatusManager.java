@@ -35,7 +35,7 @@ class StatusManager {
 	// final private int TIMEOUT_DURATION = 3000; // timeout duration in milliseconds
 	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in milliseconds
 	// for gradescope
-	final private int TIMEOUT_DURATION = 500; // timeout duration in milliseconds
+	final private int TIMEOUT_DURATION = 1000; // timeout duration in milliseconds
 	final private int HEARTBEAT_DURATION = 100; // heartbeat duration in milliseconds
 
 	/* all possible statuses of a node */
@@ -91,7 +91,7 @@ class StatusManager {
 
 	/* start a new term and election */
 	private void startElection() {
-		System.err.println("Current term " + currentTerm + " has timed out.");
+		System.err.println("Current term " + currentTerm + " of server "+currentNode+" has timed out.");
 		// register a timeout for this election period
 		task = new TimerTask() {
 			public void run() {
