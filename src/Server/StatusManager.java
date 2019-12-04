@@ -35,8 +35,8 @@ class StatusManager {
 	// final private int TIMEOUT_DURATION = 3000; // timeout duration in milliseconds
 	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in milliseconds
 	// for gradescope
-	final private int TIMEOUT_DURATION = 1000; // timeout duration in milliseconds
-	final private int HEARTBEAT_DURATION = 100; // heartbeat duration in milliseconds
+	final private int TIMEOUT_DURATION = 500; // timeout duration in milliseconds
+	final private int HEARTBEAT_DURATION = 10; // heartbeat duration in milliseconds
 
 	/* all possible statuses of a node */
 	public enum Status {
