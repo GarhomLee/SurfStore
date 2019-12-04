@@ -32,11 +32,13 @@ class StatusManager {
 	private boolean isCrashed; // indicate if this node is in the crashed state
 
 	// // for local test
-	// final private int TIMEOUT_DURATION = 3000; // timeout duration in milliseconds
-	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in milliseconds
+	// final private int TIMEOUT_DURATION = 3000; // timeout duration in
+	// milliseconds
+	// final private int HEARTBEAT_DURATION = 1000; // heartbeat duration in
+	// milliseconds
 	// for gradescope
 	final private int TIMEOUT_DURATION = 2000; // timeout duration in milliseconds
-	final private int HEARTBEAT_DURATION = 900; // heartbeat duration in milliseconds
+	final private int HEARTBEAT_DURATION = 500; // heartbeat duration in milliseconds
 
 	/* all possible statuses of a node */
 	public enum Status {
@@ -77,7 +79,8 @@ class StatusManager {
 		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
 		timer = new Timer("FollowerTimer");
 		timer.schedule(task, timeout);
-		System.err.println("A FollowerTimer is registered."); // for debug
+		System.err.println("A FollowerTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
+																														// debug
 
 		// // for debug
 		// while (true) {
@@ -91,7 +94,7 @@ class StatusManager {
 
 	/* start a new term and election */
 	private void startElection() {
-		System.err.println("Current term " + currentTerm + " of server "+currentNode+" has timed out.");
+		System.err.println("Current term " + currentTerm + " of server " + currentNode + " has timed out.");
 		// register a timeout for this election period
 		task = new TimerTask() {
 			public void run() {
@@ -109,16 +112,19 @@ class StatusManager {
 		}
 		timer = new Timer("ElectionTimer");
 		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
-		System.err.println("A startElection timer is registered."); // for debug
+		System.err
+				.println("A startElection timer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
+																															// debug
 		timer.schedule(task, timeout); // timeout start
 
 		currentTerm++;
-		System.err.println("Election for new term " + currentTerm + " has started.");
+		System.err.println("Election for new term " + currentTerm + " has started. currentNode: " + currentNode
+				+ ", term: " + currentTerm);
 		currentLeader = null;
 		currentStatus = Status.CANDIDATE;
 		votedSet.clear(); // reset to empty set
 		votedSet.add(currentNode); // add itself
-		votedFor = currentNode;  // vote for itself
+		votedFor = currentNode; // vote for itself
 
 		// request votes from all other nodes if it is still a candidate and not crashed
 		if (currentStatus == Status.CANDIDATE && !isCrashed) {
@@ -138,7 +144,8 @@ class StatusManager {
 					if (votedSet.size() < totalNodesNum / 2 + 1) {
 						// resend requestVote()
 						System.err.println("Only " + votedSet.size() + " out of " + totalNodesNum
-								+ " positive response votes. Resend requests for votes"); // for debug
+								+ " positive response votes. Resend requests for votes. currentNode: " + currentNode
+								+ ", term: " + currentTerm); // for debug
 						if (!isCrashed) {
 							sendRequestVote();
 						}
@@ -156,12 +163,14 @@ class StatusManager {
 			}
 		};
 		Timer requestVoteTimer = new Timer("RequestVoteTimer");
-		System.err.println("A requestVoteTimer is registered."); // for debug
+		System.err.println("A requestVoteTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
+																														// debug
 		requestVoteTimer.schedule(requestVoteTask, getRandomTimeout(HEARTBEAT_DURATION)); // timeout start
 
 		// use RPC to request votes from all other nodes
 		try {
-			System.err.println("Sending voting request..."); // for debug
+			System.err.println("Sending voting request... currentNode: " + currentNode + ", term: " + currentTerm); // for
+																													// debug
 			for (String server : serversList) {
 				// skip the servers if it is voted for (not against) this server
 				if (votedSet.contains(server))
@@ -197,7 +206,7 @@ class StatusManager {
 
 		// determine if it should grant vote to the requestor
 		boolean isVoted = !isCrashed; // cannot reply back if it is crashed
-		System.err.println("isVoted: if it is crashed : " + isVoted);  // debug
+		System.err.println("isVoted: if it is crashed : " + isVoted); // debug
 		isVoted = isVoted && requestorTerm > currentTerm; // check term
 		System.err.println("isVoted: if it is valid term comparison: " + isVoted); // debug
 		isVoted = isVoted && (lastLogTerm < requestorLastLogTerm
@@ -212,17 +221,17 @@ class StatusManager {
 		result.add(currentNode);
 
 		if (isVoted) {
-			votedFor = requestor;  // grant vote to the requestor
-			System.err.println("This vote is granted. Term for this server: " + currentTerm);
+			votedFor = requestor; // grant vote to the requestor
+			System.err.println("This vote is granted. currentNode: " + currentNode + ", term: " + currentTerm);
 		} else {
-			System.err.println("This vote is denied. Term for this server: " + currentTerm);
+			System.err.println("This vote is denied. currentNode: " + currentNode + ", term: " + currentTerm);
 		}
 		return result;
 	}
 
 	/* Leader actions */
 	private void leaderActions() {
-		System.err.println("This is leader actions.");
+		System.err.println("This is leader actions. currentNode: " + currentNode + ", term: " + currentTerm);
 		// reset the timer for just sending heartbeats
 		if (timer != null) {
 			timer.cancel();
@@ -237,7 +246,7 @@ class StatusManager {
 
 	/* send heartbeats to all other nodes to maintain leadership authority */
 	private void sendHeartbeat() {
-		System.err.println("Sending heartbeats to all nodes.");
+		System.err.println("Sending heartbeats to all nodes. currentNode: " + currentNode + ", term: " + currentTerm); // debug
 		task = new TimerTask() {
 			public void run() {
 				System.out.println(
@@ -249,12 +258,14 @@ class StatusManager {
 			}
 		};
 		timeout = getRandomTimeout(HEARTBEAT_DURATION); // for debug
-		System.err.println("A heartbeat is registered."); // for debug
+		System.err.println("A heartbeat is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
+																													// debug
 		timer.schedule(task, timeout);
 
 		// use RPC to send heartbeats via appendEntries()
 		try {
-			System.err.println("Sending heartbeat..."); // for debug
+			System.err.println("Sending heartbeat... currentNode: " + currentNode + ", term: " + currentTerm); // for
+																												// debug
 			for (String server : serversList) {
 				XmlRpcClient client = new XmlRpcClient("http://" + server + "/RPC2");
 				Vector<Object> params = new Vector<>();
@@ -275,7 +286,8 @@ class StatusManager {
 	 * server is crashed
 	 */
 	public boolean appendEntries(String sender, int senderTerm, String updateInfo) {
-		System.out.println("appendEntries() of "+currentNode+" is called by the leader.");
+		System.out.println("appendEntries() of " + currentNode + " is called by the leader. currentNode: " + currentNode
+				+ ", term: " + currentTerm); // debug
 		// reject this request
 		if (isCrashed || senderTerm < currentTerm) {
 			return false;
@@ -285,7 +297,7 @@ class StatusManager {
 		currentStatus = Status.FOLLOWER;
 		currentTerm = senderTerm;
 		currentLeader = sender;
-		votedFor = null;  // reset for next election
+		votedFor = null; // reset for next election
 		// reset timer and task
 		task = new TimerTask() {
 			public void run() {
@@ -299,13 +311,13 @@ class StatusManager {
 			}
 		};
 		if (timer != null) {
-			timer.cancel();  // cancel all scheduled tasks
+			timer.cancel(); // cancel all scheduled tasks
 		}
-		timer = new Timer("FollowerTimer");  // set a new timer in new thread
+		timer = new Timer("FollowerTimer"); // set a new timer in new thread
 		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
 		timer.schedule(task, timeout);
-		System.err.println("A FollowerTimer is registered after called appendEntries(). Term: " + currentTerm
-				+ "; leader: " + currentLeader); // for debug
+		System.err.println("A FollowerTimer is registered after called appendEntries(). leader: " + currentLeader
+				+ ". currentNode: " + currentNode + ", term: " + currentTerm); // for debug
 
 		return true;
 	}
