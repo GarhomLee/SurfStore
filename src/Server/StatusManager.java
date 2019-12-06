@@ -7,11 +7,11 @@ import java.util.*;
  */
 class StatusManager {
 	// for local test
-	// private int TIMEOUT_DURATION = 4000; // timeout duration in milliseconds
-	// private int HEARTBEAT_DURATION = 2000; // heartbeat duration in milliseconds, will not be random
+	// private int TIMEOUT_DURATION = 5000; // timeout duration in milliseconds
+	// private int HEARTBEAT_DURATION = 2500; // heartbeat duration in milliseconds, will not be random
 	// for gradescope
 	private int TIMEOUT_DURATION = 1000; // timeout duration in milliseconds
-	private int HEARTBEAT_DURATION = 50; // heartbeat duration inmilliseconds, will not be random
+	private int HEARTBEAT_DURATION = 100; // heartbeat duration inmilliseconds, will not be random
 
 	private String currentNode; // "host:port" of current node
 	private Vector<String> serversList; // record all servers' "host:port" info, excluding this server
