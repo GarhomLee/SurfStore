@@ -66,7 +66,7 @@ public class Server {
 			throw new XmlRpcException(-1, "1:This server is crashed. Please try another server.");
 		} catch (NotALeaderException e) {
 			// catch an exception of crashed server
-			System.err.println("NotALeaderException on Server.getfileinfomap() is found : ");
+			System.err.println("NotALeaderException on Server.getfileinfomap() is found: ");
 			System.err.println(e);
 			// throw exception back to clinet
 			throw new XmlRpcException(-2, "2:This server is not the leader. Please contact the leader server.");
@@ -86,9 +86,13 @@ public class Server {
 			if (statusManager.isCrashed()) {
 				throw new CrashedServerException();
 			}
+			System.err.println("leader alive. "); // debug
 			if (!statusManager.isLeader()) {
 				throw new NotALeaderException();
 			}
+
+			System.err.println(currentNode + " is leader."); // debug
+			
 		} catch (CrashedServerException e) {
 			System.err.println("CrashedServerException on Server.updatefile() is found: ");
 			System.err.println(e);
@@ -96,7 +100,7 @@ public class Server {
 			throw new XmlRpcException(-1, "1:This server is crashed. Please try another server.");
 		} catch (NotALeaderException e) {
 			// catch an exception of crashed server
-			System.err.println("NotALeaderException on Server.updatefile() is found : ");
+			System.err.println("NotALeaderException on Server.updatefile() is found: ");
 			System.err.println(e);
 			// throw exception back to clinet
 			throw new XmlRpcException(-2, "2:This server is not the leader. Please contact the leader server.");
@@ -106,6 +110,7 @@ public class Server {
 			System.err.println(e);
 		}
 
+		System.err.println("Client is requesting update file "+filename+" to version "+version);
 		return statusManager.updatefile(filename, version, hashlist);
 	}
 
