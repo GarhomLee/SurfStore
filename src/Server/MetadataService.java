@@ -42,4 +42,8 @@ public class MetadataService {
         return true;
     }
 
+    /* Return the current version of a given file, 0 if it does not exist */
+    public int getFileVersion(String filename) {
+        return fileInfoMap.containsKey(filename) ? (int) fileInfoMap.get(filename).get(0) : 0;
+    }
 }

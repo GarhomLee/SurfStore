@@ -3,28 +3,27 @@ import java.util.*;
 import java.net.URL;
 
 class RequestVoteCallback implements AsyncCallback {
-    private HashSet<String> votedSet;  // record servers that has voted, either "for" or "against"
-	private HashSet<String> votedForSet;  // record servers that has voted "for"
+    private HashSet<String> votedSet; // record servers that has voted, either "for" or "against"
+    private HashSet<String> votedForSet; // record servers that has voted "for"
+    private String requestor; // server that requested this vote
+    private String voter; // server that responded to this vote
 
-    public RequestVoteCallback(HashSet<String> votedSet, HashSet<String> votedForSet) {
+    public RequestVoteCallback(HashSet<String> votedSet, HashSet<String> votedForSet, String requestor, String voter) {
         this.votedSet = votedSet;
         this.votedForSet = votedForSet;
-        // this.currentTerm = currentTerm;
+        this.requestor = requestor;
+        this.voter = voter;
     }
 
     @Override
     public void handleResult(Object o, URL url, String method) {
-        Vector<Object> voteResult = (Vector<Object>) o;
-        boolean isVoted = (boolean) voteResult.get(0);
-        String voteFrom = (String) voteResult.get(1);
-        // int votedTerm = (int) voteResult.get(2);
-        votedSet.add(voteFrom);
+        boolean isVoted = (boolean) o;
+        votedSet.add(voter);
         if (isVoted) {
-            System.err.println("receive vote from: " + voteFrom);
-            votedForSet.add(voteFrom);
+            System.err.println(requestor + ": receive vote from: " + voter);
+            votedForSet.add(voter);
         } else {
-            // debug
-            System.err.println("vote denied by: " + voteFrom);
+            System.err.println(requestor + ": vote denied by: " + voter); // debug
         }
     }
 

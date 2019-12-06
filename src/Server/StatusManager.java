@@ -7,39 +7,50 @@ import java.util.*;
  */
 class StatusManager {
 	private String currentNode; // "host:port" of current node
-	private Vector<String> serversList; // record all other servers' "host:port" info
-	private Status currentStatus;
+	private Vector<String> serversList; // record all servers' "host:port" info, excluding this server
+	private Status currentStatus; // status of the server
 	private MetadataService metadataService; // handle metadata
 	private int currentTerm; // latest term server has seen (initialized to 0 on first boot, increases
 								// monotonically)
 	private String votedFor; // candidate server that received vote in a given term (or null if none), only
 								// valid in election period. Reset null in a new term
-	private HashSet<String> votedSet;  // record servers that has voted, either "for" or "against"
-	private HashSet<String> votedForSet;  // record servers that has voted "for"
+	private HashSet<String> votedSet; // record servers that has voted, either "for" or "against"
+	private HashSet<String> votedForSet; // record servers that has voted "for"
 	private Vector<Vector<Object>> logs; // log entries; each entry contains:
 											// (1) the term when entry was received by leader (first index is 0)
 											// (2) a state machine (update of a single file)
 	private int commitIndex; // index of highest log entry known to be committed (initialized to -1,
 								// increases monotonically)
-	private Hashtable<String, Integer> nextIndex; // for each server, index of the next log entry to send to that server
-													// (initialized to leader last log index + 1)
+	private int lastApplied; // index of highest log entry applied to state machine (initialized to -1,
+								// increases monotonically)
+	private Hashtable<String, Integer> nextIndex; // for each server, index of the next log entry to send to that
+													// server, initialized to leader last log index + 1
+	private Hashtable<String, Integer> matchIndex; // for each server, index of log entry that matches the ones of
+													// the leader, initialized to -1
 
 	private String currentLeader; // indicate the current leader in this term
 	private int totalNodesNum; // the total number of nodes, including current node itself
-	private Timer timer;
+	private int majorityNodeNum; // the number of majority in the given cluster
+	private Timer timer; // timer for follower timeout and election timeout
 	private TimerTask task;
-	private Timer requestVoteTimer;
+	private Timer requestVoteTimer; // timer for sending next vote request
 	private TimerTask requestVoteTask;
+	private Timer applyCommitsTimer; // timer for periodically applying commits
+	private TimerTask applyCommitsTask;
+	private Timer leaderCommitUpdateTimer; // timer for periodically update leader's commit index
+	private TimerTask leaderCommitUpdateTask;
 	private int timeout; // timeout duration, depending on random number
 	private Random random; // introduce random duration for timeout
 	private boolean isCrashed; // indicate if this node is in the crashed state
 
 	// for local test
-	final private int TIMEOUT_DURATION = 1000; // timeout duration in milliseconds
-	final private int HEARTBEAT_DURATION = 100; // heartbeat duration in milliseconds
-	// for gradescope
-	// final private int TIMEOUT_DURATION = 150; // timeout duration in milliseconds
-	// final private int HEARTBEAT_DURATION = 30; // heartbeat duration in milliseconds
+	private int TIMEOUT_DURATION = 5000; // timeout duration in milliseconds
+	private int HEARTBEAT_DURATION = 2000; // heartbeat duration in milliseconds, will not be random
+	// // for gradescope
+	// private int TIMEOUT_DURATION = 1000; // timeout duration in
+	// milliseconds
+	// private int HEARTBEAT_DURATION = 50; // heartbeat duration in
+	// milliseconds, will not be random
 
 	/* all possible statuses of a node */
 	public enum Status {
@@ -50,38 +61,46 @@ class StatusManager {
 	public StatusManager(String currentNode, Vector<String> serversList) {
 		this.currentNode = currentNode;
 		this.serversList = serversList;
-		// this.metadataService = new MetadataService();
+		this.metadataService = new MetadataService();
 		this.currentStatus = Status.FOLLOWER;
 		this.totalNodesNum = serversList.size() + 1;
+		this.majorityNodeNum = totalNodesNum / 2 + 1;
 		this.votedSet = new HashSet<>();
 		this.votedForSet = new HashSet<>();
 		this.currentTerm = 0;
 		this.logs = new Vector<>();
 		this.commitIndex = -1;
+		this.lastApplied = -1;
 		this.nextIndex = new Hashtable<>();
+		this.matchIndex = new Hashtable<>();
 		this.random = new Random();
 		this.isCrashed = false;
+		this.timer = new Timer("FollowerTimer");
 		this.requestVoteTimer = new Timer("RequestVoteTimer");
+		this.applyCommitsTimer = new Timer("ApplyCommitsTimer");
+		;
+		this.leaderCommitUpdateTimer = new Timer("LeaderCommitUpdateTimer");
 	}
 
 	/* entrance funciton to start a new server */
 	public void run() {
 		// begin as a follower
-		registerFollowerTimeout();
-		// // for debug
-		// while (true) {
-		// counter++;
-		// if (counter %100000000 == 0) {
-		// System.err.println(counter);
-		// }
+		this.commitIndex = -1;
+		this.lastApplied = -1;
 
-		// }
+		registerFollowerTimeout();
+		applyCommits();
 	}
 
 	/* start a new term and election */
 	private void startElection() {
 		System.err.println("Current term " + currentTerm + " of server " + currentNode + " has timed out.");
-		// register a timeout for this election period
+
+		/* cancel all other timers */
+		leaderCommitUpdateTimer.cancel();
+		requestVoteTimer.cancel();
+
+		/* register a timeout for this election period */
 		task = new TimerTask() {
 			public void run() {
 				System.out.println(
@@ -93,9 +112,7 @@ class StatusManager {
 				}
 			}
 		};
-		if (timer != null) {
-			timer.cancel(); // terminates this timer, discarding any currently scheduled tasks.
-		}
+		timer.cancel(); // terminates this timer, discarding any currently scheduled tasks.
 		timer = new Timer("ElectionTimer");
 		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
 		System.err
@@ -103,18 +120,21 @@ class StatusManager {
 																															// debug
 		timer.schedule(task, timeout); // timeout start
 
+		/* set up for a new election */
 		currentTerm += 1;
-		System.err.println("Election for new term " + currentTerm + " has started. currentNode: " + currentNode
-				+ ", term: " + currentTerm);
 		currentLeader = null;
 		currentStatus = Status.CANDIDATE;
+		System.err.println("Election for new term " + currentTerm + " has started. currentNode: " + currentNode
+				+ ", term: " + currentTerm); // debug
 		votedSet.clear(); // reset to empty set
 		votedSet.add(currentNode); // add itself
 		votedForSet.clear();
 		votedForSet.add(currentNode);
 		votedFor = currentNode; // vote for itself
 
-		// request votes from all other nodes if it is still a candidate and not crashed
+		/*
+		 * request votes from all other nodes if it is still a candidate and not crashed
+		 */
 		if (currentStatus == Status.CANDIDATE && !isCrashed) {
 			sendRequestVote();
 		}
@@ -129,33 +149,31 @@ class StatusManager {
 																														// debug
 				// check if it is still a candicate
 				if (currentStatus == Status.CANDIDATE) {
-					if (votedSet.size() < totalNodesNum / 2 + 1) {
-						// resend requestVote()
-						System.err.println("Only " + votedSet.size() + " out of " + totalNodesNum
-								+ " respond, with " + votedForSet.size() +" positive votes. Resend requests for votes. currentNode: " + currentNode
-								+ ", term: " + currentTerm); // for debug
+					if (votedSet.size() < majorityNodeNum) {
+						// not enough votes, resend requestVote()
+						System.err.println("Only " + votedSet.size() + " out of " + totalNodesNum + " respond, with "
+								+ votedForSet.size() + " positive votes. Resend requests for votes. currentNode: "
+								+ currentNode + ", term: " + currentTerm); // for debug
 						if (!isCrashed) {
 							sendRequestVote();
 						}
-					} else {
-						// become a leader
-						currentStatus = Status.LEADER;
-						currentLeader = currentNode;
-						votedFor = null;
+					} else if (votedForSet.size() >= majorityNodeNum) {
+						// receive enough votes as well as positive votes, become a leader
 						System.err.println("[" + currentNode + "] is now the leader with " + votedForSet.size()
 								+ " votes. Current term is: " + currentTerm);
 						if (!isCrashed) {
-							leaderActions();
+							setupLeader();
 						}
 					}
 				}
 			}
 		};
-		
-		System.err.println("A requestVoteTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for debug
+
+		System.err.println("A requestVoteTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
+																														// debug
 		requestVoteTimer.cancel();
 		requestVoteTimer = new Timer("RequestVoteTimer");
-		requestVoteTimer.schedule(requestVoteTask, getRandomTimeout(HEARTBEAT_DURATION)); // timeout start
+		requestVoteTimer.schedule(requestVoteTask, HEARTBEAT_DURATION); // timeout start
 
 		// use RPC to request votes from all other nodes
 		try {
@@ -168,26 +186,35 @@ class StatusManager {
 
 				XmlRpcClient client = new XmlRpcClient("http://" + server + "/RPC2");
 				Vector<Object> params = new Vector<>();
+				// check if the voter is not crashed and can respond. If not, skip it and ask
+				// again in the future
+				boolean isVoterCrashed = (boolean) client.execute("surfstore.isCrashed", params);
+				if (isVoterCrashed)
+					continue;
+
 				params.add(currentNode); // requestor
 				params.add(currentTerm); // requestorTerm
 				int requestorLastLogIndex = logs.size() - 1;
 				params.add(requestorLastLogIndex); // requestorLastLogIndex
 				int requestorLastLogTerm = logs.isEmpty() ? 0 : (int) logs.get(requestorLastLogIndex).get(0);
 				params.add(requestorLastLogTerm); // requestorLastLogTerm
-				client.executeAsync("surfstore.requestVote", params, new RequestVoteCallback(votedSet, votedForSet));
+
+				client.executeAsync("surfstore.requestVote", params,
+						new RequestVoteCallback(votedSet, votedForSet, currentNode, server));
 			}
 		} catch (Exception exception) {
+			// catch XmlRpcException
 			System.err.println("Exception on StatusManager.sendRequestVote() is found: ");
 			System.err.println(exception);
 		}
 	}
 
 	/*
-	 * Used to implement leader election. Return: (1)if it grants the vote to the
-	 * request; (2) the currnet server If the server is crashed, it should return an
-	 * “isCrashed” error; procedure has no effect if server is crashed
+	 * Used to implement leader election. Return: (1) if it grants the vote to the
+	 * request; (2) the currnet server. If the server is crashed, it should return
+	 * an “isCrashed” error; procedure has no effect if server is crashed
 	 */
-	public Vector<Object> requestVote(String requestor, int requestorTerm, int requestorLastLogIndex,
+	public boolean requestVote(String requestor, int requestorTerm, int requestorLastLogIndex,
 			int requestorLastLogTerm) {
 		System.err.println(
 				"requestVote() of: " + currentNode + ", requested by: " + requestor + ", for term: " + requestorTerm); // debug
@@ -195,14 +222,13 @@ class StatusManager {
 		int lastLogTerm = logs.isEmpty() ? 0 : (int) logs.get(lastLogIndex).get(0);
 
 		// determine if it should grant vote to the requestor
-		boolean isVoted = !isCrashed; // cannot reply back if it is crashed
-		System.err.println("isVoted: if it is not crashed : " + isVoted); // debug
-		isVoted = isVoted && requestorTerm > currentTerm; // check term
+		boolean isVoted = requestorTerm > currentTerm; // check term
 		if (isVoted) {
 			// term should update, and change into follower
 			currentTerm = requestorTerm;
 			currentStatus = Status.FOLLOWER;
-			votedFor = requestor; // grant vote to the requestor
+			currentLeader = null;
+			votedFor = null;
 			registerFollowerTimeout();
 		}
 		System.err.println("isVoted: if it is valid term comparison: " + isVoted); // debug
@@ -212,25 +238,23 @@ class StatusManager {
 		isVoted = isVoted && (votedFor == null || votedFor.equals(requestor)); // check if it has granted vote
 		System.err.println("isVoted: if it is valid voterFor : " + isVoted); // debug
 
-		// organize the result
-		Vector<Object> result = new Vector<>();
-		result.add(isVoted);
-		result.add(currentNode);
-
+		// for debug
 		if (isVoted) {
 			System.err.println("This vote is granted. currentNode: " + currentNode + ", term: " + currentTerm);
 			votedFor = requestor; // grant vote to the requestor
 		} else {
 			System.err.println("This vote is denied. currentNode: " + currentNode + ", term: " + currentTerm);
 		}
-		return result;
+
+		return isVoted;
 	}
 
 	/* register follower timeout */
 	private void registerFollowerTimeout() {
 		// cancel the next request vote schedule if it is already a follower
-		requestVoteTimer.cancel();  
-		
+		leaderCommitUpdateTimer.cancel();
+		requestVoteTimer.cancel();
+
 		task = new TimerTask() {
 			public void run() {
 				System.out.println(
@@ -244,30 +268,35 @@ class StatusManager {
 			}
 		};
 		timeout = getRandomTimeout(TIMEOUT_DURATION); // for debug
-		if (timer != null) {
-			timer.cancel();
-		}
+		timer.cancel(); // terminates this timer, discarding any currently scheduled tasks.
 		timer = new Timer("FollowerTimer");
 		timer.schedule(task, timeout);
-		System.err.println("A FollowerTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
-																														// debug
-
+		System.err.println("A FollowerTimer is registered. currentNode: " + currentNode + ", term: " + currentTerm); // debug
 	}
 
-	/* Leader actions */
-	private void leaderActions() {
+	/* set up a leader */
+	private void setupLeader() {
 		System.err.println("This is leader actions. currentNode: " + currentNode + ", term: " + currentTerm);
-		// reset the timer for just sending heartbeats
+		/* cancel the relevant timers */
 		requestVoteTimer.cancel();
-		if (timer != null) {
-			timer.cancel();
-		}
-		timer = new Timer("LeaderTimer");
+		timer.cancel(); // terminates this timer, discarding any currently scheduled tasks.
 
-		if (!isCrashed) {
-			sendHeartbeat();
+		/* set up all states for a leader */
+		currentStatus = Status.LEADER;
+		currentLeader = currentNode;
+		/* reset nextIndex map */
+		nextIndex.clear();
+		for (String server : serversList) {
+			nextIndex.put(server, logs.size());
+		}
+		/* reset matchIndex map */
+		matchIndex.clear();
+		for (String server : serversList) {
+			matchIndex.put(server, -1);
 		}
 
+		sendHeartbeat();
+		updateLeaderCommitIndex();
 	}
 
 	/* send heartbeats to all other nodes to maintain leadership authority */
@@ -278,84 +307,309 @@ class StatusManager {
 				System.out.println(
 						"Task performed on: " + new Date() + "\nThread's name: " + Thread.currentThread().getName()); // for
 																														// debug
-				if (currentStatus == Status.LEADER && !isCrashed) {
+				if (isLeader() && !isCrashed) {
 					sendHeartbeat();
 				}
 			}
 		};
-		timeout = getRandomTimeout(HEARTBEAT_DURATION); // for debug
-		System.err.println("A heartbeat is registered. currentNode: " + currentNode + ", term: " + currentTerm); // for
-																													// debug
-		timer.schedule(task, timeout);
+		// timeout = getRandomTimeout(HEARTBEAT_DURATION); // for debug
+		System.err.println("A heartbeat is registered. currentNode: " + currentNode + ", term: " + currentTerm); // debug
+
+		/* set timer for just sending heartbeats */
+		timer.cancel();
+		timer = new Timer("SendHeartBeatTimer");
+		timer.schedule(task, HEARTBEAT_DURATION);
 
 		// use RPC to send heartbeats via appendEntries()
 		try {
-			System.err.println("Sending heartbeat... currentNode: " + currentNode + ", term: " + currentTerm); // for
-																												// debug
+			System.err.println("Sending heartbeat... currentNode: " + currentNode + ", term: " + currentTerm); // debug
+
+			// public boolean appendEntries(String sender, int senderTerm,
+			// Vector<Vector<Object>> newEntries, int prevLogIndex,
+			// int prevLogTerm, int leaderCommit)
 			for (String server : serversList) {
 				XmlRpcClient client = new XmlRpcClient("http://" + server + "/RPC2");
 				Vector<Object> params = new Vector<>();
+
+				/*
+				 * check if the follower is not crashed and can respond. If not, skip it and ask
+				 * again in the future
+				 */
+				boolean isFollowerCrashed = (boolean) client.execute("surfstore.isCrashed", params);
+				if (isFollowerCrashed)
+					continue;
+
+				/* marshal all parameters for appendEntries() */
 				params.add(currentNode); // sender
 				params.add(currentTerm); // senderTerm
-				params.add(""); // updateInfo
-				client.executeAsync("surfstore.appendEntries", params, new AppendEntriesCallback());
+				int serverNextIndex = nextIndex.get(server);
+				Vector<Vector<Object>> newEntries = new Vector<>();
+				for (int idx = serverNextIndex; idx < logs.size(); idx++) {
+					newEntries.add(new Vector<>(logs.get(idx)));
+				}
+				params.add(newEntries); // newEntries
+				int prevLogIndex = serverNextIndex - 1;
+				params.add(prevLogIndex); // prevLogIndex
+				params.add((int) logs.get(prevLogIndex).get(0)); // prevLogTerm
+				params.add(commitIndex); // leaderCommit
+
+				client.executeAsync("surfstore.appendEntries", params,
+						new AppendEntriesCallback(nextIndex, matchIndex, currentNode, server, logs.size()));
 			}
 		} catch (Exception exception) {
+			// catch XmlRpcException
 			System.err.println("Exception on StatusManager.sendHeartbeat() is found: ");
 			System.err.println(exception);
 		}
 	}
 
 	/*
+	 * Synchronously check if there are majority of servers alive. Block until
+	 * majority are alive.
+	 */
+	private void checkWorkingFollowers() throws Exception {
+		try {
+			HashSet<String> workingFollowersSet = new HashSet<>(); // record alive followers
+			workingFollowersSet.add(currentNode);
+
+			// synchronously check if there are majority of servers alive
+			while (workingFollowersSet.size() < majorityNodeNum) {
+				for (String server : serversList) {
+					if (this.isCrashed) {
+						// throw exception if crashed and not execute this function
+						throw new Exception("Leader crashes in StatusManager.getfileinfomap(). ");
+					}
+					// skip if this node has been asked
+					if (workingFollowersSet.contains(server))
+						continue;
+
+					XmlRpcClient client = new XmlRpcClient("http://" + server + "/RPC2");
+					Vector<Object> params = new Vector<>();
+					// check if the follower is not crashed and can respond
+					boolean isFollowerCrashed = (boolean) client.execute("surfstore.isCrashed", params);
+					if (!isFollowerCrashed) {
+						workingFollowersSet.add(server);
+					}
+				}
+			}
+		} catch (Exception e) {
+			// catch XmlRpcException
+			System.err.println("Exception found in StatusManager.getfileinfomap(): ");
+			System.err.println(e);
+		}
+	}
+
+	/**
 	 * Replicate log entries; also serve as a heartbeat mechanism. If the server is
 	 * crashed, it should return an “isCrashed” error; procedure has no effect if
 	 * server is crashed
 	 */
-	public boolean appendEntries(String sender, int senderTerm, String updateInfo) {
+	public boolean appendEntries(String sender, int senderTerm, Vector<Vector<Object>> newEntries, int prevLogIndex,
+			int prevLogTerm, int leaderCommit) {
 		System.out.println("appendEntries() of " + currentNode + " is called by the leader. currentNode: " + currentNode
 				+ ", term: " + currentTerm); // debug
-		// reject this request
-		if (isCrashed || senderTerm < currentTerm) {
+
+		/*
+		 * reject this request if the term is not valid. In this case, the follower
+		 * timer will not reset.
+		 */
+		if (senderTerm < currentTerm) {
+			System.err.println("appendEntries() rejected: wrong term");
 			return false;
 		}
 
-		// if this entry is valid to append, this server must be a follower
+		/* if sender's term is valid, this server must be a follower */
 		currentStatus = Status.FOLLOWER;
+		if (senderTerm > currentTerm) {
+			votedFor = null; // reset for new term
+		}
 		currentTerm = senderTerm;
 		currentLeader = sender;
-		votedFor = null; // reset for next election
-		// reset timer and task
-		registerFollowerTimeout();
+		registerFollowerTimeout(); // reset timer and task
+		int lastEntryIndex = logs.size() - 1; // get the last index of log entries
+
+		/*
+		 * refuse to append if this server has entries less than what the leader knows
+		 */
+		if (lastEntryIndex < prevLogIndex) {
+			return false;
+		}
+		/*
+		 * refuse to append if this server's entry does not match what the leader knows
+		 */
+		if (!logs.isEmpty() && ((int) logs.get(prevLogIndex).get(0) != prevLogTerm)) {
+			return false;
+		}
+
+		/* remove all entries if this server contains more than what the leader knows */
+		while (!logs.isEmpty() && lastEntryIndex > prevLogIndex) {
+			logs.remove(lastEntryIndex);
+			lastEntryIndex -= 1;
+		}
+
+		/*
+		 * Append any new entries not already in the log. If new entries vector is
+		 * empty, it is a heartbeat
+		 */
+		if (!newEntries.isEmpty()) {
+			logs.addAll(new Vector<>(newEntries));
+			lastEntryIndex = logs.size() - 1; // update lastEntryIndex
+			commitIndex = Math.min(leaderCommit, lastEntryIndex); // update commitIndex
+		}
+
 		return true;
+	}
+
+	/**
+	 * Apply all commits if commitIndex has been updated
+	 */
+	private void applyCommits() {
+		System.err.println("Attemp to apply commits. currentNode: " + currentNode + ", term: " + currentTerm); // debug
+		/* register a applyCommitsTimer for periodically applying commits */
+		applyCommitsTask = new TimerTask() {
+			public void run() {
+				System.out.println(
+						"Task performed on: " + new Date() + "\nThread's name: " + Thread.currentThread().getName()); // debug
+				if (!isCrashed) {
+					applyCommits();
+				}
+			}
+		};
+		applyCommitsTimer.cancel(); // cancel the old timer
+		applyCommitsTimer = new Timer("ApplyCommitsTimer");
+		applyCommitsTimer.schedule(applyCommitsTask, HEARTBEAT_DURATION);
+
+		/* apply commits when commitIndex is larger than lastApplied */
+		while (lastApplied < commitIndex) {
+			Vector<Object> newFileInfo = (Vector<Object>) logs.get(lastApplied + 1).get(1); // get the newFileInfo
+																							// to apply
+			// unmarshal all parameters for updatefile()
+			String filename = (String) newFileInfo.get(0);
+			int newVersion = (int) newFileInfo.get(1);
+			Vector<String> hashlist = (Vector<String>) newFileInfo.get(2);
+			// metadataService will handle the update, either approve or reject
+			metadataService.updatefile(filename, newVersion, hashlist);
+			// update lastApplied
+			lastApplied += 1;
+		}
+	}
+
+	/**
+	 * Update leader's commit index by checking the mode of match index is at least
+	 * the majority of all nodes
+	 */
+	private void updateLeaderCommitIndex() {
+		// /* check if this node is the leader */
+		// if (currentStatus != Status.LEADER) {
+		// return;
+		// }
+
+		System.err.println(
+				"Attemp to update leader's commit index. currentNode: " + currentNode + ", term: " + currentTerm); // debug
+		/* register a leaderCommitUpdateTimer for periodically applying commits */
+		leaderCommitUpdateTask = new TimerTask() {
+			public void run() {
+				System.out.println(
+						"Task performed on: " + new Date() + "\nThread's name: " + Thread.currentThread().getName()); // debug
+				/* check if it is still a functional leader */
+				if (!isCrashed && isLeader()) {
+					updateLeaderCommitIndex();
+				}
+			}
+		};
+		leaderCommitUpdateTimer.cancel(); // cancel the old timer
+		leaderCommitUpdateTimer = new Timer("LeaderCommitUpdateTimer");
+		leaderCommitUpdateTimer.schedule(leaderCommitUpdateTask, HEARTBEAT_DURATION);
+
+		/* use Boyer-Moore Voting Algorithm */
+		int count = 1;
+		int candidateCommitIndex = this.commitIndex;
+		for (String server : matchIndex.keySet()) {
+			int currentCommitIndex = matchIndex.get(server);
+			if (count == 0) {
+				candidateCommitIndex = currentCommitIndex;
+			}
+
+			count += candidateCommitIndex == currentCommitIndex ? 1 : -1;
+		}
+
+		/* check if the count of match index is at least the majority of all nodes */
+		if (count >= majorityNodeNum) {
+			commitIndex = Math.max(commitIndex, candidateCommitIndex); // update as the bigger index
+		}
 	}
 
 	// Returns the server's FileInfoMap after communicating with the majority of
 	// nodes
-	public Hashtable<String, Vector<Object>> getfileinfomap() {
-		System.err.println("getfileinfomap() called."); // debug
+	public Hashtable<String, Vector<Object>> getfileinfomap() throws Exception {
+		System.err.println("getfileinfomap() in StatusManager is called."); // debug
+
+		try {
+			HashSet<String> workingFollowersSet = new HashSet<>(); // record alive followers
+			workingFollowersSet.add(currentNode);
+
+			// synchronously check if there are majority of servers alive
+			checkWorkingFollowers();
+
+		} catch (Exception e) {
+			// catch an exception of crashed server
+			System.err.println(
+					"Exception in StatusManager.getfileinfomap() is found (might be that the leader is crashed): ");
+			System.err.println(e);
+		}
+
+		// get the result if majority of servers are alive
 		return metadataService.getfileinfomap();
 	}
 
 	// Update's the given entry in the fileinfomap after communicating with the
 	// majority of nodes
-	public boolean updatefile(String filename, int version, Vector<String> hashlist) {
+	public boolean updatefile(String filename, int version, Vector<String> hashlist) throws Exception {
 		// System.err.println("Updating file: " + filename + "-v" + version); //debug
 
-		boolean isUpdateAccepted = metadataService.updatefile(filename, version, hashlist);
-		if (isUpdateAccepted) {
-			System.err.println("Successfully update file ino: " + filename + "-v" + version);
-		} else {
+		boolean isUpdateAccepted = false;
+		try {
+			isUpdateAccepted = metadataService.updatefile(filename, version, hashlist);
+			if (isUpdateAccepted) {
+				System.err.println("Successfully update file ino: " + filename + "-v" + version);
+			} else {
+				System.err.println(
+						"Failed to update file ino: " + filename + ", since version " + version + "is out-of-date.");
+			}
+
+			HashSet<String> workingFollowersSet = new HashSet<>(); // record alive followers
+			workingFollowersSet.add(currentNode);
+
+			// synchronously check if there are majority of servers alive
+			checkWorkingFollowers();
+
+			// marshal all info of the new file
+			Vector<Object> newFileInfo = new Vector<>();
+			newFileInfo.add(filename);
+			newFileInfo.add(version);
+			newFileInfo.add(hashlist);
+			// assemble the term and new file info in a new entry
+			Vector<Object> entry = new Vector<>();
+			entry.add(currentTerm);
+			entry.add(newFileInfo);
+			// append new entry into the log of the leader
+			logs.add(entry);
+
+		} catch (Exception e) {
+			// catch an exception of crashed server
 			System.err.println(
-					"Failed to update file ino: " + filename + ", since version " + version + "is out-of-date.");
+					"Exception in StatusManager.updatefile() is found (might be that the leader is crashed): ");
+			System.err.println(e);
 		}
 
+		// reply the result back to caller if majority of servers are alive
 		return isUpdateAccepted;
 	}
 
 	// Queries whether this metadata store is a leader
 	// Note that this call should work even when the server is "crashed"
 	public boolean isLeader() {
-		boolean res = currentStatus == Status.LEADER;
+		boolean res = this.currentStatus == Status.LEADER;
 		System.err.println("IsLeader(): " + res); // for debug
 		return res;
 	}
@@ -370,13 +624,13 @@ class StatusManager {
 			return true;
 		}
 		// set the current node as crashed state
-		isCrashed = true; 
+		isCrashed = true;
 		// cancel all scheduled task if this server is crashed
-		if (timer != null) {
-			timer.cancel(); 
-		}
-		requestVoteTimer.cancel(); 
-		// reset
+		timer.cancel();
+		requestVoteTimer.cancel();
+		applyCommitsTimer.cancel();
+		leaderCommitUpdateTimer.cancel();
+		// reset states
 		currentStatus = Status.FOLLOWER;
 		votedFor = null;
 		System.err.println("Crash(): " + isCrashed);
@@ -416,5 +670,11 @@ class StatusManager {
 		int res = (int) ((random.nextDouble() + 1) * duration);
 		System.err.println("random timetout: " + res);
 		return res;
+	}
+
+	/* Return the current version of a given file, 0 if it does not exist */
+	public int getFileVersion(String filename) {
+		System.err.println("StatusManager.getFileVersion()");
+		return metadataService.getFileVersion(filename);
 	}
 }

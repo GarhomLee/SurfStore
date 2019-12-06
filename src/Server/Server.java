@@ -5,7 +5,7 @@ import java.io.*;
 /** This class is a front layer for interacting with a SurfStore server */
 public class Server {
 	private BlockService blockService; // handle all operations about blocks
-	private MetadataService metadataService; // handle metadata
+	// private MetadataService metadataService; // handle metadata
 	private StatusManager statusManager; // manage the different statuses of a server and its corresponding
 											// behaviors
 
@@ -16,8 +16,8 @@ public class Server {
 	// Vector)
 	private static String currentNode; // "host:port" of current node
 	private static Vector<String> serversList; // record all other servers' "host:port" info
-	// private static final int PORT = 50000; // for local test
-	// private static final int PORT = 8080; // for gradescope
+	// private static int PORT = 50000; // for local test
+	// private static int PORT = 8080; // for gradescope
 
 	public Server(String currentNode, Vector<String> serversList) {
 		// blockMap = new Hashtable<>();
@@ -25,7 +25,7 @@ public class Server {
 		// blockService = new BlockService(blockMap);
 		// metadataService = new MetadataService(fileInfoMap);
 		this.blockService = new BlockService();
-		this.metadataService = new MetadataService();
+		// this.metadataService = new MetadataService();
 		this.statusManager = new StatusManager(currentNode, serversList);
 	}
 
@@ -50,29 +50,47 @@ public class Server {
 	}
 
 	// Returns the server's FileInfoMap
-	public Hashtable<String, Vector<Object>> getfileinfomap() {
-		System.err.println("getfileinfomap() called."); // debug
-		// return metadataService.getfileinfomap();
-		return statusManager.getfileinfomap();
+	public Hashtable<String, Vector<Object>> getfileinfomap() throws XmlRpcException {
+		try {
+			// throw exceptions
+			if (statusManager.isCrashed()) {
+				throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+			}
+			if (!statusManager.isLeader()) {
+				throw new XmlRpcException(-2, "This server is not the leader. Please contact the leader server.");
+			}
+			return statusManager.getfileinfomap();
+		} catch (Exception exception) {
+			// catch an exception of crashed server
+			System.err.println("Exception on Server.getfileinfomap() is found (might be that the leader is crashed): ");
+			System.err.println(exception);
+			// throw exception back to clinet
+			throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+		}
 	}
 
 	// Update's the given entry in the fileinfomap
-	public boolean updatefile(String filename, int version, Vector<String> hashlist) {
-		// // System.err.println("Updating file: " + filename + "-v" + version); //
-		// debug
-		// boolean isUpdateAccepted = metadataService.updatefile(filename, version,
-		// hashlist);
-		// if (isUpdateAccepted) {
-		// System.err.println("Successfully update file ino: " + filename + "-v" +
-		// version);
-		// } else {
-		// System.err.println(
-		// "Failed to update file ino: " + filename + ", since version " + version + "
-		// is out-of-date.");
-		// }
+	public boolean updatefile(String filename, int version, Vector<String> hashlist) throws XmlRpcException {
+		try {
+			// throw exceptions
+			if (statusManager.isCrashed()) {
+				// the server is crashed
+				throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+			}
+			if (!statusManager.isLeader()) {
+				// the server is not the leader
+				throw new XmlRpcException(-2, "This server is not the leader. Please contact the leader server.");
+			}
 
-		// return isUpdateAccepted;
-		return statusManager.updatefile(filename, version, hashlist);
+			// get the result back if the leader server is functional
+			return statusManager.updatefile(filename, version, hashlist);
+		} catch (Exception exception) {
+			// catch an exception of crashed server
+			System.err.println("Exception on Server.updatefile() is found (might be that the leader is crashed): ");
+			System.err.println(exception);
+			// throw exception back to clinet if it is crashed
+			throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+		}
 	}
 
 	// A simple ping, simply returns True
@@ -114,31 +132,12 @@ public class Server {
 		return statusManager.isCrashed();
 	}
 
-	/* Return the version of the given file, even when the server is crashed */
+	/*
+	 * Return the version of the given file even when the server is crashed. Return
+	 * 0 if it does not exist.
+	 */
 	public int tester_getversion(String filename) {
-		Hashtable<String, Vector<Object>> map = getfileinfomap();
-		int version = (int) map.get(filename).get(0);
-		System.out.println("Getting version " + version);
-		return version;
-	}
-
-	/*
-	 * Replicate log entries; also serve as a heartbeat mechanism. If the server is
-	 * crashed, it should return an “isCrashed” error; procedure has no effect if
-	 * server is crashed
-	 */
-	public boolean appendEntries(String sender, int senderTerm, String updateInfo) {
-		return statusManager.appendEntries(sender, senderTerm, updateInfo);
-	}
-
-	/*
-	 * Used to implement leader election. If the server is crashed, it should return
-	 * an “isCrashed” error; procedure has no effect if server is crashed
-	 */
-	public Vector<Object> requestVote(String requestor, int requestorTerm, int requestorLastLogIndex,
-			int requestorLastLogTerm) {
-		System.out.println("requestVote()");
-		return statusManager.requestVote(requestor, requestorTerm, requestorLastLogIndex, requestorLastLogTerm);
+		return statusManager.getFileVersion(filename);
 	}
 
 	/** start a server */
@@ -204,7 +203,7 @@ public class Server {
 			surfstoreServer.run();
 
 		} catch (Exception exception) {
-			// throw an exception
+			// catch XmlRpcException
 			System.err.println("Exception on Server is found: ");
 			System.err.println(exception);
 		}

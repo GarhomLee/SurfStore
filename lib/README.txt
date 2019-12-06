@@ -8,7 +8,7 @@ and SSL extensions.
 
 .           Location of Ant build.xml and build.properties files.
 bin/        Temporary directory for building the project.
-lib/        Final location of the jar files
+lib/         location of the jar files
 examples/   Some examples and instructions on how to run them.
 src/        Location of Java sources.
 xdocs/      XmlRpc documention in XDOC format.
