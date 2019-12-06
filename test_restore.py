@@ -33,15 +33,14 @@ if __name__ == "__main__":
 		# 		print("Not a valid name. Please try again")
 		
 		# Test ping
-		
 		print("Ping() successful")
-		print("isLeader:"+client.surfstore.isLeader())
-		print("isCrashed:"+client.surfstore.isCrashed())
-		# print("crash:"+client.surfstore.crash())
-		print("restore:"client.surfstore.restore())
-		print("isLeader:"+client.surfstore.isLeader())
-		print("isCrashed:"+client.surfstore.isCrashed())
-		client.surfstore.tester_getversion("file1.txt")
+		print(hostport+"isLeader:"+str(client.surfstore.isLeader()))
+		print(hostport+"isCrashed:"+str(client.surfstore.isCrashed()))
+		# print("crash:"+str(client.surfstore.crash()))
+		print(hostport+"restore:"+str(client.surfstore.restore()))
+		print(hostport+"isLeader:"+str(client.surfstore.isLeader()))
+		print(hostport+"isCrashed:"+str(client.surfstore.isCrashed()))
+		print(hostport+"file version on "+hostport+": "+str(client.surfstore.tester_getversion("file1.txt")))
 
 		# client.surfstore.updatefile("Test.txt", 3, [1,2,3])
 	except Exception as e:

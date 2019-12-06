@@ -169,7 +169,7 @@ public class Server {
 	// This method should always work, even when the node is crashed
 	public boolean isCrashed() {
 		boolean res = statusManager.isCrashed();
-		System.err.println(currentNode + " isCrashed() ? " + res);
+		// System.err.println(currentNode + " isCrashed() ? " + res);
 		return res;
 	}
 
