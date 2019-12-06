@@ -12,7 +12,7 @@ class StatusManager {
 	// will not be random
 	// for gradescope
 	private int TIMEOUT_DURATION = 1500; // timeout duration in milliseconds
-	private int HEARTBEAT_DURATION = 150; // heartbeat duration inmilliseconds, will not be random
+	private int HEARTBEAT_DURATION = 500; // heartbeat duration inmilliseconds, will not be random
 	// private int HEARTBEAT_DURATION = 100;
 
 	private String currentNode; // "host:port" of current node
