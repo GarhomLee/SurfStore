@@ -129,7 +129,7 @@ public class Server {
 	 */
 	public boolean appendEntries(String sender, int senderTerm, Vector<Vector<Object>> newEntries, int prevLogIndex,
 	int prevLogTerm, int leaderCommit) {
-		System.err.println("Server.appendEntries()");
+		// System.err.println("Server.appendEntries()");
 		return statusManager.appendEntries(sender, senderTerm, newEntries, prevLogIndex, prevLogTerm, leaderCommit);
 	}
 
@@ -139,14 +139,16 @@ public class Server {
 	 */
 	public boolean requestVote(String requestor, int requestorTerm, int requestorLastLogIndex,
 			int requestorLastLogTerm) {
-		System.err.println("Server.requestVote()");
+		// System.err.println("Server.requestVote()");
 		return statusManager.requestVote(requestor, requestorTerm, requestorLastLogIndex, requestorLastLogTerm);
 	}
 
 	// Queries whether this metadata store is a leader
 	// Note that this call should work even when the server is "crashed"
 	public boolean isLeader() {
-		return statusManager.isLeader();
+		boolean res = statusManager.isLeader();
+		System.err.println(currentNode + " isLeader() ? " + res);
+		return res;
 	}
 
 	// "Crashes" this metadata store
@@ -166,7 +168,9 @@ public class Server {
 	// "IsCrashed" returns the status of this metadata node (crashed or not)
 	// This method should always work, even when the node is crashed
 	public boolean isCrashed() {
-		return statusManager.isCrashed();
+		boolean res = statusManager.isCrashed();
+		System.err.println(currentNode + " isCrashed() ? " + res);
+		return res;
 	}
 
 	/*
@@ -174,7 +178,9 @@ public class Server {
 	 * 0 if it does not exist.
 	 */
 	public int tester_getversion(String filename) {
-		return statusManager.getFileVersion(filename);
+		int version = statusManager.getFileVersion(filename);
+		System.err.println(currentNode + " file version: " + version);
+		return version;
 	}
 
 	/** start a server */

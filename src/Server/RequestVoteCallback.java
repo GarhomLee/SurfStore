@@ -20,10 +20,10 @@ class RequestVoteCallback implements AsyncCallback {
         boolean isVoted = (boolean) o;
         votedSet.add(voter);
         if (isVoted) {
-            System.err.println(requestor + ": receive vote from: " + voter);
+            // System.err.println(requestor + ": receive vote from: " + voter);
             votedForSet.add(voter);
         } else {
-            System.err.println(requestor + ": vote denied by: " + voter); // debug
+            // System.err.println(requestor + ": vote denied by: " + voter); // debug
         }
     }
 
