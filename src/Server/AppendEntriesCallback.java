@@ -67,7 +67,7 @@ class AppendEntriesCallback implements AsyncCallback {
                 }
                  
             } else {
-                // System.err.println(follower + " has crashed."); // debug
+                System.err.println(follower + " has crashed."); // debug
                 crashedServersSet.add(follower);
                 // System.err.println("In callback, crashedServersSet.size()= " + crashedServersSet.size()); // debug
             }
