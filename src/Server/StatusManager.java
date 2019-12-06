@@ -12,6 +12,7 @@ class StatusManager {
 	// for gradescope
 	private int TIMEOUT_DURATION = 2000; // timeout duration in milliseconds
 	private int HEARTBEAT_DURATION = 500; // heartbeat duration inmilliseconds, will not be random
+	private int UPDATE_DURATION = 100;
 
 	private String currentNode; // "host:port" of current node
 	private Vector<String> serversList; // record all servers' "host:port" info, excluding this server
@@ -498,7 +499,7 @@ class StatusManager {
 		};
 		applyCommitsTimer.cancel(); // cancel the old timer
 		applyCommitsTimer = new Timer("ApplyCommitsTimer");
-		applyCommitsTimer.schedule(applyCommitsTask, HEARTBEAT_DURATION);
+		applyCommitsTimer.schedule(applyCommitsTask, UPDATE_DURATION);
 
 		/* apply commits when commitIndex is larger than lastApplied */
 		while (lastApplied < commitIndex) {
@@ -542,7 +543,7 @@ class StatusManager {
 		};
 		leaderCommitUpdateTimer.cancel(); // cancel the old timer
 		leaderCommitUpdateTimer = new Timer("LeaderCommitUpdateTimer");
-		leaderCommitUpdateTimer.schedule(leaderCommitUpdateTask, HEARTBEAT_DURATION);
+		leaderCommitUpdateTimer.schedule(leaderCommitUpdateTask, UPDATE_DURATION);
 
 		/* use Boyer-Moore Voting Algorithm */
 		int count = 1;
@@ -578,9 +579,6 @@ class StatusManager {
 		System.err.println("getfileinfomap() in StatusManager is called."); // debug
 
 		try {
-			HashSet<String> workingFollowersSet = new HashSet<>(); // record alive followers
-			workingFollowersSet.add(currentNode);
-
 			// synchronously check if there are majority of servers alive
 			checkWorkingFollowers();
 
@@ -605,14 +603,11 @@ class StatusManager {
 		try {
 			isUpdateAccepted = metadataService.updatefile(filename, version, hashlist);
 			if (isUpdateAccepted) {
-				System.err.println("Successfully update file ino: " + filename + "-v" + version);
+				System.err.println("Update file ino: " + filename + "-v" + version + " will succeed.");
 			} else {
 				System.err.println(
-						"Failed to update file ino: " + filename + ", since version " + version + "is out-of-date.");
+						"Update file ino: " + filename + " will fail, since version " + version + "is out-of-date.");
 			}
-
-			HashSet<String> workingFollowersSet = new HashSet<>(); // record alive followers
-			workingFollowersSet.add(currentNode);
 
 			// synchronously check if there are majority of servers alive
 			checkWorkingFollowers();
