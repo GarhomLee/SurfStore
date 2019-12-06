@@ -29,20 +29,20 @@ class AppendEntriesCallback implements AsyncCallback {
              * the entries sent to the follower are accepted, thus the follower has the same
              * logs as the leader
              */
-            System.err.println("Accepted new entries started from index " + nextIndex.get(follower) + " from leader "
-                    + leader + " to follower " + follower); // debug
+            // System.err.println("Accepted new entries started from index " + nextIndex.get(follower) + " from leader "
+            //         + leader + " to follower " + follower); // debug
 
             nextIndex.put(follower, leaderNextIndex);
             matchIndex.put(follower, leaderNextIndex - 1);
 
-            System.err.println("leaderNextIndex: " + leaderNextIndex + ", nextIndex.get(follower): "
-                    + nextIndex.get(follower) + ", matchIndex.get(follower): " + matchIndex.get(follower)); // debug
+            // System.err.println("leaderNextIndex: " + leaderNextIndex + ", nextIndex.get(follower): "
+            //         + nextIndex.get(follower) + ", matchIndex.get(follower): " + matchIndex.get(follower)); // debug
         } else {
             /* the entries are not accepted */
-            System.err.print("Rejected new entries started from index " + nextIndex.get(follower) + " from leader "
-                    + leader + " to follower " + follower); // debug
-            nextIndex.put(follower, nextIndex.get(follower) - 1);
-            System.err.print(". Try again from index " + nextIndex.get(follower));
+            // System.err.print("Rejected new entries started from index " + nextIndex.get(follower) + " from leader "
+            //         + leader + " to follower " + follower); // debug
+            nextIndex.put(follower, nextIndex.get(follower) - 1); 
+            // System.err.print(". Try again from index " + nextIndex.get(follower)); // debug
         }
     }
 

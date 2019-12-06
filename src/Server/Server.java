@@ -45,7 +45,7 @@ public class Server {
 
 	// Determine which of the provided blocks are on this server
 	public Set<String> hasblocks(Vector<String> hashlist) {
-		System.err.println("hasblocks() called."); // debug
+		// System.err.println("hasblocks() called."); // debug
 		return blockService.hasblocks(hashlist);
 	}
 
