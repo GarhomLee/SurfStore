@@ -1,5 +1,6 @@
-M: 4
+M: 5
 metadata0: localhost:50000
 metadata1: localhost:50001
 metadata2: localhost:50002
-metadata2: localhost:50003
+metadata3: localhost:50003
+metadata4: localhost:50004
