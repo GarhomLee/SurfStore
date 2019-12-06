@@ -81,18 +81,18 @@ public class SyncHandler {
             System.err.println("index.txt has been updated.");
             System.err.println();
 
-            // debug
-            if (!indexFile.exists()) {
-                System.err.println(indexFile.getAbsolutePath() + "does not exist.");
-            } else {
-                System.err.println("reading " + indexFile.getAbsolutePath());
-                Scanner scanner = new Scanner(indexFile);
-                while (scanner.hasNextLine()) {
-                    System.err.println(scanner.nextLine());
-                }
-                scanner.close();
-            }
-            System.err.println();
+            // // debug
+            // if (!indexFile.exists()) {
+            //     System.err.println(indexFile.getAbsolutePath() + "does not exist.");
+            // } else {
+            //     System.err.println("reading " + indexFile.getAbsolutePath());
+            //     Scanner scanner = new Scanner(indexFile);
+            //     while (scanner.hasNextLine()) {
+            //         System.err.println(scanner.nextLine());
+            //     }
+            //     scanner.close();
+            // }
+            // System.err.println();
 
         } catch (Exception exception) {
             // throw an exception

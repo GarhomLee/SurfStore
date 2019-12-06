@@ -50,47 +50,63 @@ public class Server {
 	}
 
 	// Returns the server's FileInfoMap
-	public Hashtable<String, Vector<Object>> getfileinfomap() throws XmlRpcException {
+	public Hashtable<String, Vector<Object>> getfileinfomap() throws Exception {
 		try {
 			// throw exceptions
 			if (statusManager.isCrashed()) {
-				throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+				throw new CrashedServerException();
 			}
 			if (!statusManager.isLeader()) {
-				throw new XmlRpcException(-2, "This server is not the leader. Please contact the leader server.");
+				throw new NotALeaderException();
 			}
-			return statusManager.getfileinfomap();
-		} catch (Exception exception) {
-			// catch an exception of crashed server
-			System.err.println("Exception on Server.getfileinfomap() is found (might be that the leader is crashed): ");
-			System.err.println(exception);
+		} catch (CrashedServerException e) {
+			System.err.println("CrashedServerException on Server.getfileinfomap() is found: ");
+			System.err.println(e);
 			// throw exception back to clinet
-			throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+			throw new XmlRpcException(-1, "1:This server is crashed. Please try another server.");
+		} catch (NotALeaderException e) {
+			// catch an exception of crashed server
+			System.err.println("NotALeaderException on Server.getfileinfomap() is found : ");
+			System.err.println(e);
+			// throw exception back to clinet
+			throw new XmlRpcException(-2, "2:This server is not the leader. Please contact the leader server.");
+		} catch (Exception e) {
+			// catch an exception of crashed server
+			System.err.println("Other Exception on Server.getfileinfomap() is found : ");
+			System.err.println(e);
 		}
+
+		return statusManager.getfileinfomap();
 	}
 
 	// Update's the given entry in the fileinfomap
-	public boolean updatefile(String filename, int version, Vector<String> hashlist) throws XmlRpcException {
+	public boolean updatefile(String filename, int version, Vector<String> hashlist) throws Exception {
 		try {
 			// throw exceptions
 			if (statusManager.isCrashed()) {
-				// the server is crashed
-				throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+				throw new CrashedServerException();
 			}
 			if (!statusManager.isLeader()) {
-				// the server is not the leader
-				throw new XmlRpcException(-2, "This server is not the leader. Please contact the leader server.");
+				throw new NotALeaderException();
 			}
-
-			// get the result back if the leader server is functional
-			return statusManager.updatefile(filename, version, hashlist);
-		} catch (Exception exception) {
+		} catch (CrashedServerException e) {
+			System.err.println("CrashedServerException on Server.updatefile() is found: ");
+			System.err.println(e);
+			// throw exception back to clinet
+			throw new XmlRpcException(-1, "1:This server is crashed. Please try another server.");
+		} catch (NotALeaderException e) {
 			// catch an exception of crashed server
-			System.err.println("Exception on Server.updatefile() is found (might be that the leader is crashed): ");
-			System.err.println(exception);
-			// throw exception back to clinet if it is crashed
-			throw new XmlRpcException(-1, "This server is crashed. Please try another server.");
+			System.err.println("NotALeaderException on Server.updatefile() is found : ");
+			System.err.println(e);
+			// throw exception back to clinet
+			throw new XmlRpcException(-2, "2:This server is not the leader. Please contact the leader server.");
+		} catch (Exception e) {
+			// catch an exception of crashed server
+			System.err.println("Other Exception on Server.updatefile() is found : ");
+			System.err.println(e);
 		}
+
+		return statusManager.updatefile(filename, version, hashlist);
 	}
 
 	// A simple ping, simply returns True
@@ -104,6 +120,27 @@ public class Server {
 	/* start for leader election and log replication implementing Raft protocol */
 	private void run() {
 		statusManager.run();
+	}
+
+	/*
+	 * Replicate log entries; also serve as a heartbeat mechanism. If the server is
+	 * crashed, it should return an “isCrashed” error; procedure has no effect if
+	 * server is crashed
+	 */
+	public boolean appendEntries(String sender, int senderTerm, Vector<Vector<Object>> newEntries, int prevLogIndex,
+	int prevLogTerm, int leaderCommit) {
+		System.err.println("Server.appendEntries()");
+		return statusManager.appendEntries(sender, senderTerm, newEntries, prevLogIndex, prevLogTerm, leaderCommit);
+	}
+
+	/*
+	 * Used to implement leader election. If the server is crashed, it should return
+	 * an “isCrashed” error; procedure has no effect if server is crashed
+	 */
+	public boolean requestVote(String requestor, int requestorTerm, int requestorLastLogIndex,
+			int requestorLastLogTerm) {
+		System.err.println("Server.requestVote()");
+		return statusManager.requestVote(requestor, requestorTerm, requestorLastLogIndex, requestorLastLogTerm);
 	}
 
 	// Queries whether this metadata store is a leader
@@ -150,7 +187,8 @@ public class Server {
 			}
 
 			String config = args[0];
-			int servernum = Integer.parseInt(args[1]); // indicate the current server at the list
+			int servernum = Integer.parseInt(args[1]); // get the i-th server at the list
+			
 			// open config file
 			InputStream configfile = new FileInputStream(config);
 			BufferedReader buf = new BufferedReader(new InputStreamReader(configfile));

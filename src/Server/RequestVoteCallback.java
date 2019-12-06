@@ -30,5 +30,6 @@ class RequestVoteCallback implements AsyncCallback {
     @Override
     public void handleError(Exception e, URL url, String method) {
         System.err.println("Exception found in RequestVoteCallBack: " + e);
+        System.err.println("method in exception: " + method);
     }
 }

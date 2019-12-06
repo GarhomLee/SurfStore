@@ -27,6 +27,8 @@ if __name__ == "__main__":
 				print(client.surfstore.crash())
 			elif function_name == "restore":
 				print(client.surfstore.restore())
+			elif function_name == "getversion":
+				print(client.surfstore.tester_getversion("file1.txt"))
 			else:
 				print("Not a valid name. Please try again")
 		
